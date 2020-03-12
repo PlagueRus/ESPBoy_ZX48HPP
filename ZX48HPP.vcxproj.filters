@@ -33,6 +33,9 @@
     <ClInclude Include="gfx\keyboard.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="__vm\.ESPBoy_ZX48HPP.vsarduino.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="glcdfont.c">

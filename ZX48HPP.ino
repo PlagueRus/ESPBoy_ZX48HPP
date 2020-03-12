@@ -94,16 +94,15 @@ uint8_t memory[49152];
 uint8_t port_fe;  //keyboard, tape, sound, border
 uint8_t port_1f;  //kempston joystick
 
-#define ZX_CLOCK_FREQ   3500000
-#define ZX_FRAME_RATE   50
+constexpr uint_fast32_t ZX_CLOCK_FREQ = 3500000;
+constexpr uint_fast32_t ZX_FRAME_RATE = 50;
 
-#define SAMPLE_RATE     48000   //more is better, but emulations gets slower
+constexpr uint_fast32_t SAMPLE_RATE = 48000;   //more is better, but emulations gets slower
 
-#define MAX_FRAMESKIP   8
+constexpr uint_fast32_t MAX_FRAMESKIP = 8;
 
 #define RGB565Q(r,g,b)    ( ((((r)>>5)&0x1f)<<11) | ((((g)>>4)&0x3f)<<5) | (((b)>>5)&0x1f) )
-//#define LHSWAP(w)         ( (((w)>>8)&0x00ff) | (((w)<<8)&0xff00) )
-#define LHSWAP(w)         ( ((w)>>8) | ((w)<<8) )
+inline static uint16_t LHSWAP(uint16_t w) {	return (w >> 8) | (w << 8); }
 
 enum {
 	K_CS = 0,
@@ -212,10 +211,10 @@ enum {
 
 volatile uint8_t sound_dac;
 
-#define SOUND_BUFFER_SIZE   (SAMPLE_RATE / ZX_FRAME_RATE * 2)
-#define SOUND_MIN_GAP       SOUND_BUFFER_SIZE/10
+constexpr size_t SOUND_BUFFER_SIZE = (SAMPLE_RATE / ZX_FRAME_RATE * 2);
+constexpr size_t SOUND_MIN_GAP = SOUND_BUFFER_SIZE / 10;
 
-volatile uint8_t* sound_buffer;
+volatile uint8_t* sound_buffer; // pointer to volatile array
 
 volatile uint16_t sound_wr_ptr;
 volatile uint16_t sound_rd_ptr;
@@ -320,7 +319,7 @@ protected:
 public:
 	__inline void emulateFrame()
 	{
-		int n, ticks, sacc, sout;
+		uint_fast32_t n, ticks, sacc, sout;
 
 		zymosis::Z80Cpu<Z48_ESPBoy>* zcpu = reinterpret_cast<zymosis::Z80Cpu<Z48_ESPBoy>*>(this);
 
@@ -985,7 +984,7 @@ void file_browser(String path, const char* header, char* fname, uint16_t fname_l
 
 void ICACHE_RAM_ATTR sound_ISR()
 {
-	int gap;
+	size_t gap;
 
 	sigmaDeltaWrite(0, sound_dac);
 
@@ -1366,10 +1365,10 @@ void loop()
 		uint32_t tt = micros() - tp;
 		uint32_t st = 1000000 / tt;
 
-		avgt = ((avgt * 49) + tt) / 50;
+		avgt = ((avgt * 19) + tt) / 20;
 
-		tft.fillRect(0, 0, 6 * 2, 10, TFT_BLACK);
-		//tft.drawString(String(avgt), 0, 10);
+		tft.fillRect(0, 0, 6 * 6, 20, TFT_BLACK);
+		tft.drawString(String(avgt), 0, 10);
 		tft.drawString(String(st), 0, 0);
 
 		delay(0);

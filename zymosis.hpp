@@ -1,4 +1,5 @@
-﻿/*
+#line 1 "L:\\ARDUINO\\PROJECTS\\ESPBoy_ZX48HPP\\zymosis.hpp"
+/*
  * Z80 CPU emulation engine v0.0.3b
  * coded by Ketmar // Vampire Avalon
  * C++ revision by Dmitry L.
@@ -17,7 +18,6 @@
 #define __ZYMOSIS_HPP__
 
 #include <cstdint>
-
  /* define either ZYMOSIS_LITTLE_ENDIAN or ZYMOSIS_BIG_ENDIAN */
 
 #if !defined(ZYMOSIS_LITTLE_ENDIAN) && !defined(ZYMOSIS_BIG_ENDIAN)
@@ -60,6 +60,74 @@ namespace zymosis {
 		Z80_FLAG_35 = Z80_FLAG_3 | Z80_FLAG_5,
 		Z80_FLAG_S35 = Z80_FLAG_S | Z80_FLAG_3 | Z80_FLAG_5
 	};
+
+#define ZYMOSIS_FLAGS_IN_FUNCTION2
+#if defined(ZYMOSIS_FLAGS_IN_STATIC) | defined(ZYMOSIS_FLAGS_IN_FUNCTION)
+	template<uint8_t N>
+	struct FA { constexpr static uint8_t val() { return (4 * (!((((N * 0x0101010101010101ULL) & 0x8040201008040201ULL) % 0x1FF) & 1))) | (N & Z80_FLAG_S35) | (N == 0 ? Z80_FLAG_Z : 0); } };
+	//template<typename ___A, ___A T> constexpr ___A force_compile_time() { return T; }
+	// enum { TT = FA<255>::val() };
+#endif
+#if defined(ZYMOSIS_FLAGS_IN_STATIC)
+	#include <array>
+
+	template<uint16_t INDEX = 0, uint16_t ...D> struct Helper : Helper<INDEX + 1, D..., FA<INDEX>::val()> { };
+	template<uint16_t ...D> struct Helper<256, D...> { static constexpr std::array<uint8_t, 256> table = { D... };	};
+	constexpr std::array<uint8_t, 256> sz53pTable = Helper<>::table;
+#define SZ53PTAB(x) (sz53pTable[(x)])
+#elif defined(ZYMOSIS_FLAGS_IN_ARRAY)
+#define SZ53PTAB(x) (sz53pTable[(x)])
+#elif defined(ZYMOSIS_FLAGS_IN_FUNCTION)
+#define _ZYMOSIS_STAMP4(n, x) \
+    x(n);                 \
+    x(n + 1);             \
+    x(n + 2);             \
+    x(n + 3)
+#define _ZYMOSIS_STAMP16(n, x) \
+    _ZYMOSIS_STAMP4(n, x);     \
+    _ZYMOSIS_STAMP4(n + 4, x); \
+    _ZYMOSIS_STAMP4(n + 8, x); \
+    _ZYMOSIS_STAMP4(n + 12, x)
+#define _ZYMOSIS_STAMP64(n, x)   \
+    _ZYMOSIS_STAMP16(n, x);      \
+    _ZYMOSIS_STAMP16(n + 16, x); \
+    _ZYMOSIS_STAMP16(n + 32, x); \
+    _ZYMOSIS_STAMP16(n + 48, x)
+#define _ZYMOSIS_STAMP256(n, x)   \
+    _ZYMOSIS_STAMP64(n, x);       \
+    _ZYMOSIS_STAMP64(n + 64, x);  \
+    _ZYMOSIS_STAMP64(n + 128, x); \
+    _ZYMOSIS_STAMP64(n + 192, x)
+#define _ZYMOSIS_STAMP(n, x) _ZYMOSIS_STAMP##n(0, x)
+#define SZ53PTAB(x) (fSZ53PTAB(x))
+#define caseSZ53PTAB(n) case n: return FA<n>::val(); break;
+	ZYMOSIS_INLINE uint8_t fSZ53PTAB(uint8_t t)
+	{
+		switch (t) {
+			_ZYMOSIS_STAMP(256, caseSZ53PTAB);
+		default: return 0;
+		}
+		return 0;
+	}
+#elif defined(ZYMOSIS_FLAGS_IN_FUNCTION2)
+	ZYMOSIS_INLINE uint8_t fSZ53PTAB(uint8_t x)
+	{
+		uint8_t t = x ^ (x >> 4);
+		t = t ^ (t >> 2);
+		return ((~(t ^ (t >> 1))) & 1) * 4 | (x & Z80_FLAG_S35) | ((!x) * Z80_FLAG_Z);
+	}
+#define SZ53PTAB(x) (fSZ53PTAB(x))
+#elif defined(ZYMOSIS_FLAGS_IN_FUNCTION3)
+	ZYMOSIS_INLINE uint8_t fSZ53PTAB(uint8_t x)
+	{
+		uint_fast8_t t = (x & Z80_FLAG_S35) | ((!x) * Z80_FLAG_Z);
+		uint_fast8_t p = 1;
+		while (x) { x &= x - 1; p = !p; }
+		return t | p*4;
+	}
+#define SZ53PTAB(x) (fSZ53PTAB(x))
+#endif
+
 
 	union Z80WordReg {
 		uint16_t w;
@@ -136,12 +204,12 @@ namespace zymosis {
 		uint16_t org_pc; /* first byte of the current command */
 		uint8_t regI;
 		uint8_t regR;
-		int iff1, iff2; /* boolean */
+		bool iff1, iff2; /* boolean */
 		uint8_t im; /* IM (0-2) */
-		int halted; /* boolean; is CPU halted? main progam must manually reset this flag when it's appropriate */
+		bool halted; /* boolean; is CPU halted? main progam must manually reset this flag when it's appropriate */
 		int32_t tstates; /* t-states passed from previous interrupt (0-...) */
 		int32_t next_event_tstate; /* Z80Execute() will exit when tstates>=next_event_tstate */
-		int prev_was_EIDDR; /* 1: previous instruction was EI/FD/DD? (they blocks /INT); -1: prev vas LD A,I or LD A,R */
+		int8_t prev_was_EIDDR; /* 1: previous instruction was EI/FD/DD? (they blocks /INT); -1: prev vas LD A,I or LD A,R */
 							/* Zymosis will reset this flag only if it executed at least one instruction */
 		bool evenM1; /* boolean; emulate 128K/Scorpion M1 contention? */
 		// void* user; /* arbitrary user data */
@@ -241,9 +309,9 @@ namespace zymosis {
 #define Z80_ContentionIRBy1(_cnt)  Z80_ContentionBy1((((uint16_t)this->regI)<<8)|(this->regR), (_cnt))
 #define Z80_ContentionPCBy1(_cnt)  Z80_ContentionBy1(this->pc, (_cnt))
 
-#define Z80_AND_A(_b) (this->af.f = sz53pTable[this->af.a&=(_b)]|Z80_FLAG_H)
-#define Z80_OR_A(_b)  (this->af.f = sz53pTable[this->af.a|=(_b)])
-#define Z80_XOR_A(_b) (this->af.f = sz53pTable[this->af.a^=(_b)])
+#define Z80_AND_A(_b) (this->af.f = SZ53PTAB(this->af.a&=(_b))|Z80_FLAG_H)
+#define Z80_OR_A(_b)  (this->af.f = SZ53PTAB(this->af.a|=(_b)))
+#define Z80_XOR_A(_b) (this->af.f = SZ53PTAB(this->af.a^=(_b)))
 
 #define INC_R  (this->regR = ((this->regR+1)&0x7f)|(this->regR&0x80))
 
@@ -252,6 +320,7 @@ namespace zymosis {
 	{
 		static_assert(std::is_base_of<Z80CallBacks, T>::value, "Type T must be derived from Z80CallBacks");
 
+#if defined(ZYMOSIS_FLAGS_IN_ARRAY)
 		static bool tablesInitialized;
 		static uint8_t sz53pTable[256]; /* bits 3, 5 and 7 of result, Z and P flags */
 		/* Z80InitTables() should be called before anyting else! */
@@ -259,40 +328,70 @@ namespace zymosis {
 		{
 			if (!tablesInitialized) {
 				int16_t f;
-				/***/
 				for (f = 0; f <= 255; ++f) {
 					int n, p;
-					/***/
 					for (n = f, p = 0; n != 0; n >>= 1) p ^= n & 0x01;
 					sz53pTable[f] = (f & Z80_FLAG_S35) | (p ? 0 : Z80_FLAG_PV);
 				}
 				sz53pTable[0] |= Z80_FLAG_Z;
-				/***/
+				
 				tablesInitialized = true;
 			}
 		}
-
-		inline bool SET_TRUE_CC(uint8_t opcode)
+#endif
+		
+		/*inline bool SET_TRUE_CC(uint8_t opcode)
 		{
 			bool trueCC = false;
 			switch ((opcode >> 3) & 0x07)
 			{
-			case 0: trueCC = (this->af.f & Z80_FLAG_Z) == 0; break;
-			case 1: trueCC = (this->af.f & Z80_FLAG_Z) != 0; break;
-			case 2: trueCC = (this->af.f & Z80_FLAG_C) == 0; break;
-			case 3: trueCC = (this->af.f & Z80_FLAG_C) != 0; break;
-			case 4: trueCC = (this->af.f & Z80_FLAG_PV) == 0; break;
-			case 5: trueCC = (this->af.f & Z80_FLAG_PV) != 0; break;
-			case 6: trueCC = (this->af.f & Z80_FLAG_S) == 0; break;
-			case 7: trueCC = (this->af.f & Z80_FLAG_S) != 0; break;
+			case 0: return (this->af.f & Z80_FLAG_Z) == 0; break;
+			case 1: return (this->af.f & Z80_FLAG_Z) != 0; break;
+			case 2: return (this->af.f & Z80_FLAG_C) == 0; break;
+			case 3: return (this->af.f & Z80_FLAG_C) != 0; break;
+			case 4: return (this->af.f & Z80_FLAG_PV) == 0; break;
+			case 5: return (this->af.f & Z80_FLAG_PV) != 0; break;
+			case 6: return (this->af.f & Z80_FLAG_S) == 0; break;
+			case 7: return (this->af.f & Z80_FLAG_S) != 0; break;
 			}
 			return trueCC;
-		}
+		}*/
 
+		ZYMOSIS_INLINE bool SET_TRUE_CC(uint8_t opcode)
+		{
+			uint8_t op = (opcode >> 3) & 0x07;
+			if (op < 4)
+			{
+				if (op < 2)
+				{
+					if (!op)  return (this->af.f & Z80_FLAG_Z) == 0;
+					return (this->af.f & Z80_FLAG_Z) != 0;
+				}
+				else
+				{
+					if (op == 2) return (this->af.f & Z80_FLAG_C) == 0;
+					return (this->af.f & Z80_FLAG_C) != 0;
+				}
+			}
+			else
+			{
+				if (op < 6)
+				{
+					if (op == 4) return (this->af.f & Z80_FLAG_PV) == 0;
+					return (this->af.f & Z80_FLAG_PV) != 0;
+				}
+				else
+				{
+					if (op == 6) return (this->af.f & Z80_FLAG_S) == 0;
+					return (this->af.f & Z80_FLAG_S) != 0;
+				}
+			}
+			return false;
+		}
 		/* t1: setting /MREQ & /RD */
 		/* t2: memory read */
 		/* t3, t4: decode command, increment R */
-		inline void GET_OPCODE(uint8_t& _opc)
+		ZYMOSIS_INLINE void GET_OPCODE(uint8_t& _opc)
 		{
 			do {
 				this->contentionFn(this->pc, 4, static_cast<Z80MemIOType>(Z80_MREQ_READ | Z80_MEMIO_OPCODE));
@@ -303,7 +402,7 @@ namespace zymosis {
 			} while (0);
 		}
 
-		inline void GET_OPCODE_EXT(uint8_t& _opc) {
+		ZYMOSIS_INLINE void GET_OPCODE_EXT(uint8_t& _opc) {
 			do {
 				this->contentionFn(this->pc, 4, static_cast<Z80MemIOType>(Z80_MREQ_READ | Z80_MEMIO_OPCEXT));
 				_opc = this->memReadFn(this->pc, Z80_MEMIO_OPCEXT);
@@ -393,7 +492,7 @@ namespace zymosis {
 			/***/
 			this->af.a = (_new = o + b + (this->af.f & Z80_FLAG_C)) & 0xff; /* Z80_FLAG_C is 0x01, so it's safe */
 			this->af.f =
-				(sz53pTable[_new & 0xff] & ~Z80_FLAG_PV) |
+				(SZ53PTAB(_new & 0xff) & ~Z80_FLAG_PV) |
 				(_new > 0xff ? Z80_FLAG_C : 0) |
 				((o ^ (~b)) & (o ^ _new) & 0x80 ? Z80_FLAG_PV : 0) |
 				((o & 0x0f) + (b & 0x0f) + (this->af.f & Z80_FLAG_C) >= 0x10 ? Z80_FLAG_H : 0);
@@ -405,7 +504,7 @@ namespace zymosis {
 			this->af.a = (_new = ((int32_t)o - (int32_t)b - (int32_t)(this->af.f & Z80_FLAG_C)) & 0xffff) & 0xff; /* Z80_FLAG_C is 0x01, so it's safe */
 			this->af.f =
 				Z80_FLAG_N |
-				(sz53pTable[_new & 0xff] & ~Z80_FLAG_PV) |
+				(SZ53PTAB(_new & 0xff) & ~Z80_FLAG_PV) |
 				(_new > 0xff ? Z80_FLAG_C : 0) |
 				((o ^ b) & (o ^ _new) & 0x80 ? Z80_FLAG_PV : 0) |
 				((int32_t)(o & 0x0f) - (int32_t)(b & 0x0f) - (int32_t)(this->af.f & Z80_FLAG_C) < 0 ? Z80_FLAG_H : 0);
@@ -441,7 +540,7 @@ namespace zymosis {
 			this->af.f |= Z80_FLAG_N |
 				(b == 0x80 ? Z80_FLAG_PV : 0) |
 				(b & 0x0f ? 0 : Z80_FLAG_H) |
-				(sz53pTable[(((int)b) - 1) & 0xff] & ~Z80_FLAG_PV);
+				(SZ53PTAB((((int)b) - 1) & 0xff) & ~Z80_FLAG_PV);
 			return (((int)b) - 1) & 0xff;
 		}
 
@@ -451,7 +550,7 @@ namespace zymosis {
 			this->af.f |=
 				(b == 0x7f ? Z80_FLAG_PV : 0) |
 				((b + 1) & 0x0f ? 0 : Z80_FLAG_H) |
-				(sz53pTable[(b + 1) & 0xff] & ~Z80_FLAG_PV);
+				(SZ53PTAB((b + 1) & 0xff) & ~Z80_FLAG_PV);
 			return ((b + 1) & 0xff);
 		}
 
@@ -493,7 +592,7 @@ namespace zymosis {
 		ZYMOSIS_INLINE uint8_t Z80_RL(uint8_t b) {
 			uint8_t c = (b >> 7)& Z80_FLAG_C;
 			/***/
-			this->af.f = sz53pTable[(b = ((b << 1) & 0xff) | (this->af.f & Z80_FLAG_C))] | c;
+			this->af.f = SZ53PTAB((b = ((b << 1) & 0xff) | (this->af.f & Z80_FLAG_C))) | c;
 			return b;
 		}
 
@@ -501,7 +600,7 @@ namespace zymosis {
 		ZYMOSIS_INLINE uint8_t Z80_RR(uint8_t b) {
 			uint8_t c = (b & 0x01);
 			/***/
-			this->af.f = sz53pTable[(b = (b >> 1) | ((this->af.f & Z80_FLAG_C) << 7))] | c;
+			this->af.f = SZ53PTAB((b = (b >> 1) | ((this->af.f & Z80_FLAG_C) << 7))) | c;
 			return b;
 		}
 
@@ -509,7 +608,7 @@ namespace zymosis {
 		ZYMOSIS_INLINE uint8_t Z80_RLC(uint8_t b) {
 			uint8_t c = ((b >> 7)& Z80_FLAG_C);
 			/***/
-			this->af.f = sz53pTable[(b = ((b << 1) & 0xff) | c)] | c;
+			this->af.f = SZ53PTAB((b = ((b << 1) & 0xff) | c)) | c;
 			return b;
 		}
 
@@ -517,7 +616,7 @@ namespace zymosis {
 		ZYMOSIS_INLINE uint8_t Z80_RRC(uint8_t b) {
 			uint8_t c = (b & 0x01);
 			/***/
-			this->af.f = sz53pTable[(b = (b >> 1) | (c << 7))] | c;
+			this->af.f = SZ53PTAB((b = (b >> 1) | (c << 7))) | c;
 			return b;
 		}
 
@@ -525,44 +624,43 @@ namespace zymosis {
 			uint8_t c = ((b >> 7) & 0x01);
 			/***/
 			b <<= 1;
-			this->af.f = sz53pTable[b] | c;
+			this->af.f = SZ53PTAB(b) | c;
 			return b;
 		}
 
 		ZYMOSIS_INLINE uint8_t Z80_SRA(uint8_t b) {
 			uint8_t c = (b & 0x01);
 			/***/
-			this->af.f = sz53pTable[(b = (b >> 1) | (b & 0x80))] | c;
+			this->af.f = SZ53PTAB((b = (b >> 1) | (b & 0x80))) | c;
 			return b;
 		}
 
 		ZYMOSIS_INLINE uint8_t Z80_SLL(uint8_t b) {
 			uint8_t c = ((b >> 7) & 0x01);
 			/***/
-			this->af.f = sz53pTable[(b = (b << 1) | 0x01)] | c;
+			this->af.f = SZ53PTAB((b = (b << 1) | 0x01)) | c;
 			return b;
 		}
 
 		ZYMOSIS_INLINE uint8_t Z80_SLR(uint8_t b) {
 			uint8_t c = (b & 0x01);
 			/***/
-			this->af.f = sz53pTable[(b >>= 1)] | c;
+			this->af.f = SZ53PTAB((b >>= 1)) | c;
 			return b;
 		}
 
 
 		/* ddvalue+value */
 		ZYMOSIS_INLINE uint16_t Z80_ADD_DD(uint16_t value, uint16_t ddvalue) {
-			static const uint8_t hct[8] = { 0, Z80_FLAG_H, Z80_FLAG_H, Z80_FLAG_H, 0, 0, 0, Z80_FLAG_H };
+			//static const uint8_t hct[8] = { 0, Z80_FLAG_H, Z80_FLAG_H, Z80_FLAG_H, 0, 0, 0, Z80_FLAG_H };
 			uint32_t res = (uint32_t)value + (uint32_t)ddvalue;
-			uint8_t b = ((value & 0x0800) >> 11) | ((ddvalue & 0x0800) >> 10) | ((res & 0x0800) >> 9);
+			uint8_t b = (((value & 0x0FFF) + (ddvalue & 0x0FFF)) >> 8) & 0x10;
 			/***/
 			this->memptr.w = (ddvalue + 1) & 0xffff;
 			this->af.f =
 				(this->af.f & (Z80_FLAG_PV | Z80_FLAG_Z | Z80_FLAG_S)) |
 				(res > 0xffff ? Z80_FLAG_C : 0) |
-				((res >> 8)& Z80_FLAG_35) |
-				hct[b];
+				((res >> 8)& Z80_FLAG_35) | b;
 			return res;
 		}
 
@@ -618,7 +716,7 @@ namespace zymosis {
 			if (tmpC != 0 || tmpA > 0x99) tmpI |= 0x60;
 			if (tmpA > 0x99) tmpC = Z80_FLAG_C;
 			if (this->af.f & Z80_FLAG_N) Z80_SUB_A(tmpI); else Z80_ADD_A(tmpI);
-			this->af.f = (this->af.f & ~(Z80_FLAG_C | Z80_FLAG_PV)) | tmpC | (sz53pTable[this->af.a] & Z80_FLAG_PV);
+			this->af.f = (this->af.f & ~(Z80_FLAG_C | Z80_FLAG_PV)) | tmpC | (SZ53PTAB(this->af.a) & Z80_FLAG_PV);
 		}
 
 
@@ -629,7 +727,7 @@ namespace zymosis {
 			Z80_ContentionBy1(this->hl.w, 4);
 			Z80_PokeB3T(this->hl.w, (this->af.a << 4) | (tmpB >> 4));
 			this->af.a = (this->af.a & 0xf0) | (tmpB & 0x0f);
-			this->af.f = (this->af.f & Z80_FLAG_C) | sz53pTable[this->af.a];
+			this->af.f = (this->af.f & Z80_FLAG_C) | SZ53PTAB(this->af.a);
 		}
 
 		ZYMOSIS_INLINE void Z80_RLD_A() {
@@ -639,7 +737,7 @@ namespace zymosis {
 			Z80_ContentionBy1(this->hl.w, 4);
 			Z80_PokeB3T(this->hl.w, (tmpB << 4) | (this->af.a & 0x0f));
 			this->af.a = (this->af.a & 0xf0) | (tmpB >> 4);
-			this->af.f = (this->af.f & Z80_FLAG_C) | sz53pTable[this->af.a];
+			this->af.f = (this->af.f & Z80_FLAG_C) | SZ53PTAB(this->af.a);
 		}
 
 
@@ -647,14 +745,16 @@ namespace zymosis {
 			this->af.a = ir;
 			this->prev_was_EIDDR = -1;
 			Z80_ContentionIRBy1(1);
-			this->af.f = (sz53pTable[this->af.a] & ~Z80_FLAG_PV) | (this->af.f & Z80_FLAG_C) | (this->iff2 ? Z80_FLAG_PV : 0);
+			this->af.f = (SZ53PTAB(this->af.a) & ~Z80_FLAG_PV) | (this->af.f & Z80_FLAG_C) | (this->iff2 ? Z80_FLAG_PV : 0);
 		}
 
 
 	public:
 		Z80Cpu()
 		{
+#if defined(ZYMOSIS_FLAGS_IN_ARRAY)
 			Z80_InitTables();
+#endif
 		}
 
 		void Z80_Reset()
@@ -666,9 +766,9 @@ namespace zymosis {
 			this->pc = this->prev_pc = this->org_pc = 0;
 			this->memptr.w = 0;
 			this->regI = this->regR = 0;
-			this->iff1 = this->iff2 = 0;
+			this->iff1 = this->iff2 = false;
 			this->im = 0;
-			this->halted = 0;
+			this->halted = false;
 			this->prev_was_EIDDR = 0;
 			this->tstates = 0;
 			this->dd = &this->hl;
@@ -695,7 +795,7 @@ namespace zymosis {
 				if (this->halted) { DEC_W(this->pc); continue; }
 				/***/
 				if (opcode == 0xdd || opcode == 0xfd) {
-					static const uint32_t withIndexBmp[8] = { 0x00,0x700000,0x40404040,0x40bf4040,0x40404040,0x40404040,0x0800,0x00 };
+					constexpr uint32_t withIndexBmp[8] = { 0x00,0x700000,0x40404040,0x40bf4040,0x40404040,0x40404040,0x0800,0x00 };
 					/* IX/IY prefix */
 					this->dd = (opcode == 0xdd ? &this->ix : &this->iy);
 					/* read opcode -- OCR(4) */
@@ -814,8 +914,8 @@ namespace zymosis {
 						this->af.f =
 							(tmpB & 0x80 ? Z80_FLAG_N : 0) |
 							(tmpC < tmpB ? Z80_FLAG_H | Z80_FLAG_C : 0) |
-							(sz53pTable[(tmpC & 0x07) ^ this->bc.b] & Z80_FLAG_PV) |
-							(sz53pTable[this->bc.b] & ~Z80_FLAG_PV);
+							(SZ53PTAB((tmpC & 0x07) ^ this->bc.b) & Z80_FLAG_PV) |
+							(SZ53PTAB(this->bc.b) & ~Z80_FLAG_PV);
 						/***/
 						if (CBX_REPEATED) {
 							/* repeating commands */
@@ -839,7 +939,7 @@ namespace zymosis {
 							case 0:
 								this->memptr.w = ZADD_WX(this->bc.w, 1);
 								tmpB = Z80_PortIn(this->bc.w);
-								this->af.f = sz53pTable[tmpB] | (this->af.f & Z80_FLAG_C);
+								this->af.f = SZ53PTAB(tmpB) | (this->af.f & Z80_FLAG_C);
 								switch ((opcode >> 3) & 0x07) {
 								case 0: this->bc.b = tmpB; break;
 								case 1: this->bc.c = tmpB; break;
@@ -1254,7 +1354,7 @@ namespace zymosis {
 					break;
 					/* 0x40..0x7F (LD r8,r8) */
 				case 0x40:
-					if (opcode == 0x76) { this->halted = 1; DEC_W(this->pc); continue; } /* HALT */
+					if (opcode == 0x76) { this->halted = true; DEC_W(this->pc); continue; } /* HALT */
 					rsrc = (opcode & 0x07);
 					rdst = ((opcode >> 3) & 0x07);
 					switch (rsrc) {
@@ -1396,9 +1496,9 @@ namespace zymosis {
 							this->hl.w = tmpW;
 							break;
 							/* DI */
-						case 6: this->iff1 = this->iff2 = 0; break;
+						case 6: this->iff1 = this->iff2 = false; break;
 							/* EI */
-						case 7: this->iff1 = this->iff2 = 1; this->prev_was_EIDDR = 1; break;
+						case 7: this->iff1 = this->iff2 = true; this->prev_was_EIDDR = 1; break;
 						}
 						break;
 						/* CALL cc,nn */
@@ -1476,8 +1576,8 @@ namespace zymosis {
 			/***/
 			if (this->prev_was_EIDDR < 0) { this->prev_was_EIDDR = 0; this->af.f &= ~Z80_FLAG_PV; } /* Z80 bug */
 			if (this->prev_was_EIDDR || !this->iff1) return 0; /* not accepted */
-			if (this->halted) { this->halted = 0; INC_PC; }
-			this->iff1 = this->iff2 = 0; /* disable interrupts */
+			if (this->halted) { this->halted = false; INC_PC; }
+			this->iff1 = this->iff2 = false; /* disable interrupts */
 			/***/
 			switch ((this->im &= 0x03)) {
 			case 3: /* ??? */ this->im = 0;
@@ -1519,9 +1619,9 @@ namespace zymosis {
 			/*if (this->prev_was_EIDDR < 0) { this->prev_was_EIDDR = 0; this->af.f &= ~Z80_FLAG_PV; }*/
 			/*if (this->prev_was_EIDDR) return 0;*/
 			this->prev_was_EIDDR = 0; /* don't care */
-			if (this->halted) { this->halted = 0; INC_PC; }
+			if (this->halted) { this->halted = false; INC_PC; }
 			INC_R;
-			this->iff1 = 0; /* IFF2 is not changed */
+			this->iff1 = true; /* IFF2 is not changed */
 			this->tstates += 5; /* M1 cycle: 5 T states to do an opcode read and decrement SP */
 			/* M2 cycle: 3 T states write high byte of PC to the stack and decrement SP */
 			/* M3 cycle: 3 T states write the low byte of PC and jump to #0066 */
@@ -1563,11 +1663,13 @@ namespace zymosis {
 		}
 	};
 
+#if defined(ZYMOSIS_FLAGS_IN_ARRAY)
 	template <class T>
 	bool Z80Cpu<T>::tablesInitialized = false;
 
 	template <class T>
 	uint8_t Z80Cpu<T>::sz53pTable[256]; /* bits 3, 5 and 7 of result, Z and P flags */
+#endif
 
 }; // zymosis namespace
 
