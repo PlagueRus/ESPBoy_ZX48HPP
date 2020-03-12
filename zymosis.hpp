@@ -795,7 +795,7 @@ namespace zymosis {
 				if (this->halted) { DEC_W(this->pc); continue; }
 				/***/
 				if (opcode == 0xdd || opcode == 0xfd) {
-					constexpr uint32_t withIndexBmp[8] = { 0x00,0x700000,0x40404040,0x40bf4040,0x40404040,0x40404040,0x0800,0x00 };
+					static const uint32_t withIndexBmp[8] = { 0x00,0x700000,0x40404040,0x40bf4040,0x40404040,0x40404040,0x0800,0x00 };
 					/* IX/IY prefix */
 					this->dd = (opcode == 0xdd ? &this->ix : &this->iy);
 					/* read opcode -- OCR(4) */

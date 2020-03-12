@@ -18,9 +18,6 @@
     <None Include="ZX48HPP.ino" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="__vm\.ZX48HPP.vsarduino.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="zymosis.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>

@@ -219,6 +219,37 @@ volatile uint8_t* sound_buffer; // pointer to volatile array
 volatile uint16_t sound_wr_ptr;
 volatile uint16_t sound_rd_ptr;
 
+
+class str_ext { // is constexpr file-ext string class
+private:
+	const char* const p_;
+	const uint8_t sz_;
+public:
+
+	template<size_t N>
+	constexpr str_ext(const char(&a)[N]) : // ctor
+		p_(a), sz_(N - 1) {}
+	constexpr char operator[](size_t n) const { // []
+		return n < sz_ ? p_[n] : 0;
+	}
+	constexpr size_t size() const { return sz_; } // size()
+
+	constexpr uint32_t toUint32() const
+	{
+#if BYTE_ORDER == LITTLE_ENDIAN
+		return p_[0] + (p_[1] << 8) + (p_[2] << 16);
+#else
+		return (p_[0]<<24) + (p_[1] << 16) + (p_[2] << 8);
+#endif
+	}
+};
+
+enum { 
+	EXT_Z80 = str_ext("z80").toUint32(), 
+	EXT_SCR = str_ext("scr").toUint32(),
+	EXT_CFG = str_ext("cfg").toUint32(),
+};
+
 class Z48_ESPBoy : protected zymosis::Z80CallBacks
 {
 protected:
@@ -356,9 +387,10 @@ public:
 
 	__inline void renderFrame()
 	{
-		uint16_t ch, ln, px, row, aptr, optr, attr, pptr1, pptr2, line1, line2, bright;
+		uint16_t ch, ln, px, row, aptr, optr, attr, pptr1, pptr2, bright;
 		uint_fast16_t ink, pap;
-		uint_fast16_t col;
+		uint_fast16_t col = 0;
+		uint8_t line1, line2;
 
 		const uint_fast16_t palette[16] = {
 		  RGB565Q(0, 0, 0),
@@ -419,13 +451,23 @@ public:
 
 				line1 = memory[pptr1++];
 				line2 = memory[pptr2++];
-
-				for (px = 0; px < 8; px += 2)
+				px = 4;
+				while(px--)
 				{
-					col = (line1 & 0x80) ? ink : pap;
-					col += (line1 & 0x40) ? ink : pap;
-					col += (line2 & 0x80) ? ink : pap;
-					col += (line2 & 0x40) ? ink : pap;
+					switch( (line1 >> 6) | ((line2 & 0xC0) >> 4) )
+					{
+						case 0x00: col = pap * 4; break;
+						case 0x01:
+						case 0x02:
+						case 0x04:
+						case 0x08: col = ink + pap * 3; break;
+						case 0x07:
+						case 0x0B:
+						case 0x0D:
+						case 0x0E: col = ink * 3 + pap; break;
+						case 0x0F: col = ink * 4; break;
+						default: col = ink * 2 + pap * 2; 
+					}
 
 					line_buffer[optr++] = col;
 
@@ -713,12 +755,19 @@ void printFast(int x, int y, char* str, int16_t color)
 {
 	char c;
 
-	while (1)
+	while (c = *str++)
 	{
-		c = *str++;
+		drawCharFast(x, y, c, color, 0);
+		x += 6;
+	} 
+}
 
-		if (!c) break;
+void printFast_P(int x, int y, PGM_P str, int16_t color)
+{
+	char c;
 
+	while (c = pgm_read_byte(str++))
+	{
 		drawCharFast(x, y, c, color, 0);
 		x += 6;
 	}
@@ -766,15 +815,9 @@ bool espboy_logo_effect(int out)
 
 #define CONTROL_TYPES   5
 
-const char* const layout_name[] = {
-  "KEMP",
-  "QAOP",
-  "ZXse",
-  "SINC",
-  "CURS"
-};
+ const char layout_name[] PROGMEM = "KEMP\0QAOP\0ZXse\0SINC\0CURS\0";
 
-const int8_t layout_scheme[] = {
+constexpr int8_t layout_scheme[] PROGMEM = {
   -1, 0, 0, 0, 0, 0, 0, 0,
   K_O, K_P, K_Q, K_A, K_SPACE, K_M, K_0, K_1,
   K_Z, K_X, K_Q, K_A, K_SPACE, K_ENTER, K_0, K_1,
@@ -785,7 +828,7 @@ const int8_t layout_scheme[] = {
 
 
 #define FILE_HEIGHT    14
-#define FILE_FILTER   "z80"
+#define FILE_FILTER   F("z80")
 
 int16_t file_cursor;
 
@@ -793,12 +836,10 @@ uint8_t file_browser_ext(const char* name)
 {
 	while (1) if (*name++ == '.') break;
 
-	return (strcasecmp(name, FILE_FILTER) == 0) ? 1 : 0;
+	return (strcasecmp_P(name, (PGM_P)FILE_FILTER) == 0) ? 1 : 0;
 }
 
-
-
-void file_browser(String path, const char* header, char* fname, uint16_t fname_len)
+void file_browser(const char* path, const __FlashStringHelper* header, char* fname, uint16_t fname_len)
 {
 	int16_t i, sy, pos, off, frame, file_count, control_type;
 	uint16_t j;
@@ -831,12 +872,12 @@ void file_browser(String path, const char* header, char* fname, uint16_t fname_l
 
 	if (!file_count)
 	{
-		printFast(24, 60, (char*)"No files found", TFT_RED);
+		printFast_P(24, 60, PSTR("No files found"), TFT_RED);
 
 		while (1) delay(1000);
 	}
 
-	printFast(4, 4, (char*)header, TFT_GREEN);
+	printFast_P(4, 4, (PGM_P)header, TFT_GREEN);
 	tft.fillRect(0, 12, 128, 1, TFT_WHITE);
 
 	change = 1;
@@ -846,7 +887,7 @@ void file_browser(String path, const char* header, char* fname, uint16_t fname_l
 	{
 		if (change)
 		{
-			printFast(100, 4, (char*)layout_name[control_type], TFT_WHITE);
+			printFast_P(100, 4, &layout_name[control_type*5], TFT_WHITE);
 
 			pos = file_cursor - FILE_HEIGHT / 2;
 
@@ -960,17 +1001,17 @@ void file_browser(String path, const char* header, char* fname, uint16_t fname_l
 
 	off = control_type * 8;
 
-	if (layout_scheme[off + 0] >= 0)
+	if (pgm_read_byte(&layout_scheme[off + 0]) >= 0)
 	{
 		control_type = CONTROL_PAD_KEYBOARD;
-		control_pad_l = layout_scheme[off + 0];
-		control_pad_r = layout_scheme[off + 1];
-		control_pad_u = layout_scheme[off + 2];
-		control_pad_d = layout_scheme[off + 3];
-		control_pad_act = layout_scheme[off + 4];
-		control_pad_esc = layout_scheme[off + 5];
-		control_pad_lft = layout_scheme[off + 6];
-		control_pad_rgt = layout_scheme[off + 7];
+		control_pad_l = pgm_read_byte(&layout_scheme[off + 0]);
+		control_pad_r = pgm_read_byte(&layout_scheme[off + 1]);
+		control_pad_u = pgm_read_byte(&layout_scheme[off + 2]);
+		control_pad_d = pgm_read_byte(&layout_scheme[off + 3]);
+		control_pad_act = pgm_read_byte(&layout_scheme[off + 4]);
+		control_pad_esc = pgm_read_byte(&layout_scheme[off + 5]);
+		control_pad_lft = pgm_read_byte(&layout_scheme[off + 6]);
+		control_pad_rgt = pgm_read_byte(&layout_scheme[off + 7]);
 	}
 	else
 	{
@@ -1065,8 +1106,6 @@ void setup() {
 	//Serial.println(ESP.getFreeHeap());
 }
 
-
-
 void sound_init(void)
 {
 	uint16_t i;
@@ -1089,76 +1128,50 @@ void sound_init(void)
 	interrupts();
 }
 
-
-
-void change_ext(char* fname, const char* ext)
+void change_ext(char* fname, const uint32_t ext)
 {
 	while (1)
 	{
 		if (!*fname) break;
 		if (*fname++ == '.')
 		{
-			fname[0] = ext[0];
-			fname[1] = ext[1];
-			fname[2] = ext[2];
+			fname[0] = ext & 0xFF;
+			fname[1] = (ext >> 8) & 0xFF;
+			fname[2] = (ext >> 16) & 0xFF;
 			break;
 		}
 	}
 }
 
 
+uint8_t code2layout[] PROGMEM = 
+{
+	K_SS,		//35
+	K_ENTER,	//36
+	0, 0, 0, 0, // 37-40
+	0, 0, 0, 0, 0, 0, 0, // 41-47
+	K_0, K_1, K_2, K_3,	K_4, K_5, K_6, K_7, K_8, K_9, // 48-57
+	0, 0, 0, 0, 0, 0, // 
+	K_CS, // 64
+	K_A, K_B, K_C, K_D,	K_E, // 65-69
+	K_F, K_G, K_H, K_I, K_J, // 70-74
+	K_K, K_L, K_M, K_N, K_O, // 75-79
+	K_P, K_Q, K_R, K_S, K_T, // 80-84
+	K_U, K_V, K_W, K_X, K_Y, // 85-89
+	K_Z, // 90
+	0, 0, 0, 0, // 91-94
+	K_SPACE, // 95
+};
 
-uint8_t zx_layout_code(char c)
+uint8_t zx_layout_code(uint8_t c)
 {
 	if (c >= 'a' && c <= 'z') c -= 32;
-	switch (c)
+	if (c > 34 && c < 96)
 	{
-	case 'A': return K_A;
-	case 'B': return K_B;
-	case 'C': return K_C;
-	case 'D': return K_D;
-	case 'E': return K_E;
-	case 'F': return K_F;
-	case 'G': return K_G;
-	case 'H': return K_H;
-	case 'I': return K_I;
-	case 'J': return K_J;
-	case 'K': return K_K;
-	case 'L': return K_L;
-	case 'M': return K_M;
-	case 'N': return K_N;
-	case 'O': return K_O;
-	case 'P': return K_P;
-	case 'Q': return K_Q;
-	case 'R': return K_R;
-	case 'S': return K_S;
-	case 'T': return K_T;
-	case 'U': return K_U;
-	case 'V': return K_V;
-	case 'W': return K_W;
-	case 'X': return K_X;
-	case 'Y': return K_Y;
-	case 'Z': return K_Z;
-	case '0': return K_0;
-	case '1': return K_1;
-	case '2': return K_2;
-	case '3': return K_3;
-	case '4': return K_4;
-	case '5': return K_5;
-	case '6': return K_6;
-	case '7': return K_7;
-	case '8': return K_8;
-	case '9': return K_9;
-	case '_': return K_SPACE;
-	case '$': return K_ENTER;
-	case '@': return K_CS;
-	case '#': return K_SS;
+		return pgm_read_byte(&code2layout[c-35]);
 	}
-
 	return 0;
 }
-
-
 
 void zx_load_layout(char* filename)
 {
@@ -1280,7 +1293,7 @@ void loop()
 		espboy_logo_effect(1);
 	}
 
-	file_browser("/", "Load .Z80:", filename, sizeof(filename));
+	file_browser("/", F("Load .Z80:"), filename, sizeof(filename));
 
 	//zx_init();
 
@@ -1288,17 +1301,17 @@ void loop()
 
 	if (*filename) // filename is not ""
 	{
-		change_ext(filename, "cfg");
+		change_ext(filename, EXT_CFG);
 		zx_load_layout(filename);
 
-		change_ext(filename, "scr");
+		change_ext(filename, EXT_SCR);
 		if (cpu.load_scr(filename))
 		{
 			cpu.renderFrame();
 			wait_any_key(3 * 1000);
 		}
 
-		change_ext(filename, "z80");
+		change_ext(filename, EXT_CFG);
 		cpu.Z80_Reset();
 		cpu.load_z80(filename);
 	}
