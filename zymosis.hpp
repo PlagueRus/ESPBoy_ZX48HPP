@@ -18,6 +18,7 @@
 #define __ZYMOSIS_HPP__
 
 #include <cstdint>
+
  /* define either ZYMOSIS_LITTLE_ENDIAN or ZYMOSIS_BIG_ENDIAN */
 
 #if !defined(ZYMOSIS_LITTLE_ENDIAN) && !defined(ZYMOSIS_BIG_ENDIAN)

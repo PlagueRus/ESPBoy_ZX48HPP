@@ -89,75 +89,30 @@ bool border_changed = false;
 uint8_t line_change[24]; //bit mask to updating each line
 char filename[32];
 
-uint8_t memory[49152];
+uint8_t memory[0xC000]; //49152 bytes
 
 uint8_t port_fe;  //keyboard, tape, sound, border
 uint8_t port_1f;  //kempston joystick
 
 constexpr uint_fast32_t ZX_CLOCK_FREQ = 3500000;
 constexpr uint_fast32_t ZX_FRAME_RATE = 50;
-
 constexpr uint_fast32_t SAMPLE_RATE = 48000;   //more is better, but emulations gets slower
-
 constexpr uint_fast32_t MAX_FRAMESKIP = 8;
 
 #define RGB565Q(r,g,b)    ( ((((r)>>5)&0x1f)<<11) | ((((g)>>4)&0x3f)<<5) | (((b)>>5)&0x1f) )
-inline static uint16_t LHSWAP(uint16_t w) {	return (w >> 8) | (w << 8); }
+inline uint16_t LHSWAP(uint16_t w) { return (w >> 8) | (w << 8); }
 
 enum {
-	K_CS = 0,
-	K_Z,
-	K_X,
-	K_C,
-	K_V,
-
-	K_A,
-	K_S,
-	K_D,
-	K_F,
-	K_G,
-
-	K_Q,
-	K_W,
-	K_E,
-	K_R,
-	K_T,
-
-	K_1,
-	K_2,
-	K_3,
-	K_4,
-	K_5,
-
-	K_0,
-	K_9,
-	K_8,
-	K_7,
-	K_6,
-
-	K_P,
-	K_O,
-	K_I,
-	K_U,
-	K_Y,
-
-	K_ENTER,
-	K_L,
-	K_K,
-	K_J,
-	K_H,
-
-	K_SPACE,
-	K_SS,
-	K_M,
-	K_N,
-	K_B,
-
-	K_DEL,
-	K_LED,
-	K_NULL = 255,
+	K_CS = 0, K_Z, K_X, K_C, K_V,
+	K_A, K_S, K_D, K_F, K_G,
+	K_Q, K_W, K_E, K_R, K_T,
+	K_1, K_2, K_3, K_4, K_5,
+	K_0, K_9, K_8, K_7, K_6,
+	K_P, K_O, K_I, K_U, K_Y,
+	K_ENTER,  K_L, K_K, K_J, K_H,
+	K_SPACE, K_SS, K_M, K_N, K_B,
+	K_DEL,  K_LED, K_NULL = 255,
 };
-
 
 constexpr uint8_t keybCurrent[7][5] PROGMEM = {
 	{K_Q, K_E, K_R, K_U, K_O},
@@ -189,8 +144,9 @@ constexpr uint8_t keybOnscr[2][21] PROGMEM = {
 "ASDFGHJKLecZXCVBNMs_",
 };
 
-
-uint8_t key_matrix[41]; //41 is NULL
+#undef min // defined in TFT_SPI
+#include <bitset>
+std::bitset<41> key_matriz;
 
 uint8_t control_type;
 
@@ -215,7 +171,6 @@ constexpr size_t SOUND_BUFFER_SIZE = (SAMPLE_RATE / ZX_FRAME_RATE * 2);
 constexpr size_t SOUND_MIN_GAP = SOUND_BUFFER_SIZE / 10;
 
 volatile uint8_t* sound_buffer; // pointer to volatile array
-
 volatile uint16_t sound_wr_ptr;
 volatile uint16_t sound_rd_ptr;
 
@@ -258,8 +213,9 @@ protected:
 	__inline void reset()
 	{
 		memset(memory, 0, sizeof(memory));
-		memset(key_matrix, 0, sizeof(key_matrix));
 		memset(line_change, 0xff, sizeof(line_change));
+
+		key_matriz.reset();
 
 		port_fe = 0;
 		port_1f = 0;
@@ -324,11 +280,11 @@ protected:
 			if (!(port & 0x4000)) off = 5 * 6;
 			if (!(port & 0x8000)) off = 5 * 7;
 
-			if (key_matrix[off + 0]) val &= ~0x01;
-			if (key_matrix[off + 1]) val &= ~0x02;
-			if (key_matrix[off + 2]) val &= ~0x04;
-			if (key_matrix[off + 3]) val &= ~0x08;
-			if (key_matrix[off + 4]) val &= ~0x10;
+			if (key_matriz[off + 0]) val &= ~0x01;
+			if (key_matriz[off + 1]) val &= ~0x02;
+			if (key_matriz[off + 2]) val &= ~0x04;
+			if (key_matriz[off + 3]) val &= ~0x08;
+			if (key_matriz[off + 4]) val &= ~0x10;
 		}
 		else
 		{
@@ -1135,9 +1091,9 @@ void change_ext(char* fname, const uint32_t ext)
 		if (!*fname) break;
 		if (*fname++ == '.')
 		{
-			fname[0] = ext & 0xFF;
-			fname[1] = (ext >> 8) & 0xFF;
-			fname[2] = (ext >> 16) & 0xFF;
+			fname[0] = (uint8_t)(ext & 0xFF); 
+			fname[1] = (uint8_t)((ext >> 8) & 0xFF);
+			fname[2] = (uint8_t)((ext >> 16) & 0xFF);
 			break;
 		}
 	}
@@ -1214,11 +1170,11 @@ void keybModule() {
 			{
 				if (!symkeyboardpressed) keykeyboardpressed = pgm_read_byte(&keybCurrent[row][col]);
 				else keykeyboardpressed = pgm_read_byte(&keybCurrent2[row][col]);
-				if (keykeyboardpressed < 40) key_matrix[keykeyboardpressed] |= 1;
+				if (keykeyboardpressed < 40) key_matriz.set(keykeyboardpressed);
 				else {
 					if (keykeyboardpressed == K_DEL) {
-						key_matrix[K_0] |= 1;
-						key_matrix[K_CS] |= 1;
+						key_matriz.set(K_0);
+						key_matriz.set(K_CS);
 					}
 					if (keykeyboardpressed == K_LED) {
 						mcpKeyboard.digitalWrite(7, !mcpKeyboard.digitalRead(7));
@@ -1257,9 +1213,9 @@ void keybOnscreen() {
 		if (pad_state) redrawOnscreen(selX, selY, shifts);
 	}
 
-	if (pad_state & PAD_ACT) key_matrix[pgm_read_byte(&keybOnscrMatrix[selY][selX])] |= 1;
-	if (pad_state & PAD_ACT && (shifts & 1)) key_matrix[K_CS] |= 1;
-	if (pad_state & PAD_ACT && (shifts & 2)) key_matrix[K_SS] |= 1;
+	if (pad_state & PAD_ACT) key_matriz.set(pgm_read_byte(&keybOnscrMatrix[selY][selX]));
+	if (pad_state & PAD_ACT && (shifts & 1)) key_matriz.set(K_CS);
+	if (pad_state & PAD_ACT && (shifts & 2)) key_matriz.set(K_SS);
 	delay(300);
 	check_key();
 	tft.fillRect(0, 128 - 16, 128, 16, TFT_BLACK);
@@ -1285,8 +1241,6 @@ void loop()
 	control_pad_lft = K_NULL;
 	control_pad_rgt = K_NULL;
 
-	//logo (skippable)
-
 	if (espboy_logo_effect(0))
 	{
 		wait_any_key(1000);
@@ -1294,8 +1248,6 @@ void loop()
 	}
 
 	file_browser("/", F("Load .Z80:"), filename, sizeof(filename));
-
-	//zx_init();
 
 	cpu.Z80_Reset();
 
@@ -1311,7 +1263,7 @@ void loop()
 			wait_any_key(3 * 1000);
 		}
 
-		change_ext(filename, EXT_CFG);
+		change_ext(filename, EXT_Z80);
 		cpu.Z80_Reset();
 		cpu.load_z80(filename);
 	}
@@ -1327,7 +1279,7 @@ void loop()
 
 	while (1)
 	{
-		memset(key_matrix, 0, sizeof(key_matrix));
+		key_matriz.reset();
 		check_key();
 
 		//check onscreen keyboard
@@ -1339,14 +1291,14 @@ void loop()
 		switch (control_type)
 		{
 		case CONTROL_PAD_KEYBOARD:
-			key_matrix[control_pad_l] |= (pad_state & PAD_LEFT) ? 1 : 0;
-			key_matrix[control_pad_r] |= (pad_state & PAD_RIGHT) ? 1 : 0;
-			key_matrix[control_pad_u] |= (pad_state & PAD_UP) ? 1 : 0;
-			key_matrix[control_pad_d] |= (pad_state & PAD_DOWN) ? 1 : 0;
-			key_matrix[control_pad_act] |= (pad_state & PAD_ACT) ? 1 : 0;
-			key_matrix[control_pad_esc] |= (pad_state & PAD_ESC) ? 1 : 0;
-			key_matrix[control_pad_lft] |= (pad_state & PAD_LFT) ? 1 : 0;
-			key_matrix[control_pad_rgt] |= (pad_state & PAD_RGT) ? 1 : 0;
+			key_matriz.set(control_pad_l, pad_state & PAD_LEFT);
+			key_matriz.set(control_pad_r, pad_state & PAD_RIGHT);
+			key_matriz.set(control_pad_u, pad_state & PAD_UP);
+			key_matriz.set(control_pad_d, pad_state & PAD_DOWN);
+			key_matriz.set(control_pad_act, pad_state & PAD_ACT);
+			key_matriz.set(control_pad_esc, pad_state & PAD_ESC);
+			key_matriz.set(control_pad_lft, pad_state & PAD_LFT);
+			key_matriz.set(control_pad_rgt, pad_state & PAD_RGT);
 			break;
 
 		case CONTROL_PAD_KEMPSTON:
@@ -1356,9 +1308,9 @@ void loop()
 			if (pad_state & PAD_UP) port_1f |= 0x08;
 			if (pad_state & PAD_DOWN) port_1f |= 0x04;
 			if (pad_state & PAD_ACT) port_1f |= 0x10;
-			key_matrix[K_SPACE] = (pad_state & PAD_ESC) ? 1 : 0;
-			key_matrix[K_0] = (pad_state & PAD_LFT) ? 1 : 0;
-			key_matrix[K_1] = (pad_state & PAD_RGT) ? 1 : 0;
+			key_matriz.set(K_SPACE, pad_state & PAD_ESC);
+			key_matriz.set(K_0, pad_state & PAD_LFT);
+			key_matriz.set(K_1, pad_state & PAD_RGT);
 			break;
 		}
 
@@ -1381,7 +1333,7 @@ void loop()
 		avgt = ((avgt * 19) + tt) / 20;
 
 		tft.fillRect(0, 0, 6 * 6, 20, TFT_BLACK);
-		tft.drawString(String(avgt), 0, 10);
+		tft.drawString(String(sound_wr_ptr), 0, 10);
 		tft.drawString(String(st), 0, 0);
 
 		delay(0);

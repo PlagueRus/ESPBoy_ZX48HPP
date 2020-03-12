@@ -19,7 +19,7 @@
 #define ICACHE_FLASH
 #define BEARSSL_SSL_BASIC
 #define NONOSDK22x_190703 1
-#define F_CPU 80000000L
+#define F_CPU 160000000L
 #define LWIP_OPEN_SRC
 #define TCP_MSS 536
 #define LWIP_FEATURES 1
