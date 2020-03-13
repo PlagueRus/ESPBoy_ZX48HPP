@@ -1,5 +1,4 @@
-
-
+//v1.3 12.03.2020 core rewritten to c++, memory and speed optimizations
 //v1.2 06.01.2020 bug fixes, onscreen keyboard added, keyboard module support
 //v1.1 23.12.2019  z80 format v3 support, improved frameskip, screen and controls config files
 //v1.0 20.12.2019 initial version, with sound
@@ -7,6 +6,10 @@
 //shiru@mail.ru
 //https://www.patreon.com/shiru8bit
 //uses Z80 core by Ketmar
+
+#pragma GCC optimize ("-Ofast")
+#pragma GCC push_options
+
 #include <Wire.h>
 #include <SPI.h>
 
@@ -144,9 +147,9 @@ constexpr uint8_t keybOnscr[2][21] PROGMEM = {
 "ASDFGHJKLecZXCVBNMs_",
 };
 
-#undef min // defined in TFT_SPI
+#undef min // defined in TFT_SPI but breaks the bitset library
 #include <bitset>
-std::bitset<41> key_matriz;
+std::bitset<41> key_matriz; // 8 bytes
 
 uint8_t control_type;
 

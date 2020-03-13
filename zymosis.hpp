@@ -1,4 +1,3 @@
-#line 1 "L:\\ARDUINO\\PROJECTS\\ESPBoy_ZX48HPP\\zymosis.hpp"
 /*
  * Z80 CPU emulation engine v0.0.3b
  * coded by Ketmar // Vampire Avalon
@@ -10,8 +9,6 @@
  * To Public License, Version 2, as published by Sam Hocevar. See
  * http://sam.zoy.org/wtfpl/COPYING for more details.
  */
-
-
 #pragma once
 
 #ifndef __ZYMOSIS_HPP__
@@ -22,8 +19,12 @@
  /* define either ZYMOSIS_LITTLE_ENDIAN or ZYMOSIS_BIG_ENDIAN */
 
 #if !defined(ZYMOSIS_LITTLE_ENDIAN) && !defined(ZYMOSIS_BIG_ENDIAN)
-#define ZYMOSIS_LITTLE_ENDIAN
-// # error wtf?! Zymosis endiannes is not defined!
+	#if BYTE_ORDER == LITTLE_ENDIAN
+		#define ZYMOSIS_LITTLE_ENDIAN
+	#else
+		#define ZYMOSIS_BIG_ENDIAN
+	#endif
+	// # error wtf?! Zymosis endiannes is not defined!
 #endif
 
 #if defined(ZYMOSIS_LITTLE_ENDIAN) && defined(ZYMOSIS_BIG_ENDIAN)
@@ -46,6 +47,13 @@
 # endif
 #endif
 
+#ifndef PROGMEM
+#define PROGMEM
+#define pgm_read_byte(x) (x)
+#define pgm_read_word(x) (x)
+#define pgm_read_dword(x) (x)
+#endif
+
 namespace zymosis {
 
 	enum {
@@ -62,6 +70,12 @@ namespace zymosis {
 		Z80_FLAG_S35 = Z80_FLAG_S | Z80_FLAG_3 | Z80_FLAG_5
 	};
 
+// Five different fSZ53PTAB() function realizations. Lookup function returns zx register flag state for values. Roughly calculated performance.
+// 1. Original based on static initialized array.						100.0%
+// 2. Const array with compile-time data filling.						100.3%
+// 3. Switch-based function generation. (compiler make lookup table).	100.3%
+// 4. Bit ops based function (without loops).							100.5%	<-- Carefully chosed. 
+// 4. Naive function (with loop).										101.6%
 #define ZYMOSIS_FLAGS_IN_FUNCTION2
 #if defined(ZYMOSIS_FLAGS_IN_STATIC) | defined(ZYMOSIS_FLAGS_IN_FUNCTION)
 	template<uint8_t N>
@@ -201,7 +215,7 @@ namespace zymosis {
 		Z80WordReg* dd; /* pointer to current HL/IX/IY (inside this struct) for the current command */
 		Z80WordReg memptr;
 		uint16_t pc; /* program counter */
-		uint16_t prev_pc; /* first byte of the previous command */
+		//uint16_t prev_pc; /* first byte of the previous command */
 		uint16_t org_pc; /* first byte of the current command */
 		uint8_t regI;
 		uint8_t regR;
@@ -764,7 +778,7 @@ namespace zymosis {
 
 			this->bc.w = this->de.w = this->hl.w = this->af.w = this->sp.w = this->ix.w = this->iy.w = 0;
 			this->bcx.w = this->dex.w = this->hlx.w = this->afx.w = 0;
-			this->pc = this->prev_pc = this->org_pc = 0;
+			this->pc = /* this->prev_pc =*/ this->org_pc = 0;
 			this->memptr.w = 0;
 			this->regI = this->regR = 0;
 			this->iff1 = this->iff2 = false;
@@ -787,7 +801,8 @@ namespace zymosis {
 			while (this->tstates < this->next_event_tstate) {
 				this->pagerFn();
 				if (this->checkBPFn()) return;
-				this->prev_pc = this->org_pc; this->org_pc = this->pc;
+				//this->prev_pc = this->org_pc; 
+				this->org_pc = this->pc;
 				/* read opcode -- OCR(4) */
 				GET_OPCODE(opcode);
 				this->prev_was_EIDDR = 0;
@@ -796,13 +811,13 @@ namespace zymosis {
 				if (this->halted) { DEC_W(this->pc); continue; }
 				/***/
 				if (opcode == 0xdd || opcode == 0xfd) {
-					static const uint32_t withIndexBmp[8] = { 0x00,0x700000,0x40404040,0x40bf4040,0x40404040,0x40404040,0x0800,0x00 };
+					static const uint32_t withIndexBmp[8] PROGMEM = { 0x00,0x700000,0x40404040,0x40bf4040,0x40404040,0x40404040,0x0800,0x00 };
 					/* IX/IY prefix */
 					this->dd = (opcode == 0xdd ? &this->ix : &this->iy);
 					/* read opcode -- OCR(4) */
 					GET_OPCODE_EXT(opcode);
 					/* test if this instruction have (HL) */
-					if (withIndexBmp[opcode >> 5] & (1 << (opcode & 0x1f))) {
+					if (pgm_read_dword(&withIndexBmp[opcode >> 5]) & (1 << (opcode & 0x1f))) {
 						/* 3rd byte is always DISP here */
 						disp = Z80_PeekB3TA(this->pc); if (disp > 127) disp -= 256;
 						INC_PC;

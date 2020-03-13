@@ -112,6 +112,7 @@
     <DebuggerFlavor>VisualMicroDebugger</DebuggerFlavor>
   </PropertyGroup>
   <ItemGroup>
+    <None Include=".gitattributes" />
     <None Include="ZX48HPP.ino">
       <FileType>CppCode</FileType>
     </None>
