@@ -4,6 +4,9 @@
 #ifndef FONT5X7_H
 #define FONT5X7_H
 
+#pragma GCC optimize ("-Ofast")
+#pragma GCC push_options
+
 #ifdef __AVR__
  #include <avr/io.h>
  #include <avr/pgmspace.h>

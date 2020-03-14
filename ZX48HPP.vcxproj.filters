@@ -13,33 +13,78 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Header Files\ESPboy_UI">
+      <UniqueIdentifier>{e0201d7c-46a4-47c3-a810-3b7904b0451c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\ZX48">
+      <UniqueIdentifier>{da51130b-a089-41f2-bcc2-ec0327e5ea4e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\OTA">
+      <UniqueIdentifier>{bd199aac-5951-425e-95cf-b785c5211895}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\ZX48">
+      <UniqueIdentifier>{8df5a879-f842-455f-882c-b3afe4b22659}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\OTA">
+      <UniqueIdentifier>{a5817a74-e487-421f-ac90-bd5df9fd13cc}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="zymosis.hpp">
+    <ClInclude Include="User_Setup.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="rom\rom.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="ESPboy_UI\ESPBoy_UIkeys.hpp">
+      <Filter>Header Files\ESPboy_UI</Filter>
+    </ClInclude>
+    <ClInclude Include="ESPboy_UI\ESPBoy_UIObj.hpp">
+      <Filter>Header Files\ESPboy_UI</Filter>
+    </ClInclude>
+    <ClInclude Include="ESPboy_UI\ESPboy_UIWiFi.hpp">
+      <Filter>Header Files\ESPboy_UI</Filter>
+    </ClInclude>
+    <ClInclude Include="ESPboy_UI\strconst.hpp">
+      <Filter>Header Files\ESPboy_UI</Filter>
+    </ClInclude>
+    <ClInclude Include="ESPboyLogo.h">
+      <Filter>Header Files\OTA</Filter>
     </ClInclude>
     <ClInclude Include="gfx\espboy.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="gfx\keyboard.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\ZX48</Filter>
     </ClInclude>
     <ClInclude Include="__vm\.ESPBoy_ZX48HPP.vsarduino.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\ZX48</Filter>
+    </ClInclude>
+    <ClInclude Include="gfx\keyboard.h">
+      <Filter>Header Files\ZX48</Filter>
+    </ClInclude>
+    <ClInclude Include="OTACore.h">
+      <Filter>Header Files\OTA</Filter>
+    </ClInclude>
+    <ClInclude Include="rom\rom.h">
+      <Filter>Header Files\ZX48</Filter>
+    </ClInclude>
+    <ClInclude Include="zymosis.hpp">
+      <Filter>Header Files\ZX48</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="ESPBoy_UIkeys.cpp">
+      <Filter>Source Files\OTA</Filter>
+    </ClCompile>
     <ClCompile Include="glcdfont.c">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\ZX48</Filter>
+    </ClCompile>
+    <ClCompile Include="OTACore.cpp">
+      <Filter>Source Files\OTA</Filter>
+    </ClCompile>
+    <ClCompile Include="ZX48.cpp">
+      <Filter>Source Files\ZX48</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="ZX48HPP.ino" />
     <None Include=".gitattributes">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="ESPBoy_ZX48HPP.ino" />
   </ItemGroup>
 </Project>

@@ -14,6 +14,9 @@
 #ifndef __ZYMOSIS_HPP__
 #define __ZYMOSIS_HPP__
 
+#pragma GCC optimize ("-Ofast")
+#pragma GCC push_options
+
 #include <cstdint>
 
  /* define either ZYMOSIS_LITTLE_ENDIAN or ZYMOSIS_BIG_ENDIAN */
@@ -36,7 +39,7 @@
 #  define ZYMOSIS_PACKED  /*__attribute__((packed)) __attribute__((gcc_struct))*/
 # endif
 # ifndef ZYMOSIS_INLINE
-#  define ZYMOSIS_INLINE  __inline
+#  define ZYMOSIS_INLINE  __attribute__((always_inline)) 
 # endif
 #else
 # ifndef ZYMOSIS_PACKED

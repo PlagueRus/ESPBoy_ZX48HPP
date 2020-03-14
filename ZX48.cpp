@@ -1,3 +1,5 @@
+#pragma GCC optimize ("-Ofast")
+#pragma GCC push_options
 //v1.3 12.03.2020 core rewritten to c++, memory and speed optimizations
 //v1.2 06.01.2020 bug fixes, onscreen keyboard added, keyboard module support
 //v1.1 23.12.2019  z80 format v3 support, improved frameskip, screen and controls config files
@@ -6,9 +8,10 @@
 //shiru@mail.ru
 //https://www.patreon.com/shiru8bit
 //uses Z80 core by Ketmar
+#include "User_Setup.h"
+#define USER_SETUP_LOADED
 
-#pragma GCC optimize ("-Ofast")
-#pragma GCC push_options
+#include <arduino.h>
 
 #include <Wire.h>
 #include <SPI.h>
@@ -92,8 +95,6 @@ bool border_changed = false;
 uint8_t line_change[24]; //bit mask to updating each line
 char filename[32];
 
-uint8_t memory[0xC000]; //49152 bytes
-
 uint8_t port_fe;  //keyboard, tape, sound, border
 uint8_t port_1f;  //kempston joystick
 
@@ -112,9 +113,9 @@ enum {
 	K_1, K_2, K_3, K_4, K_5,
 	K_0, K_9, K_8, K_7, K_6,
 	K_P, K_O, K_I, K_U, K_Y,
-	K_ENTER,  K_L, K_K, K_J, K_H,
+	K_ENTER, K_L, K_K, K_J, K_H,
 	K_SPACE, K_SS, K_M, K_N, K_B,
-	K_DEL,  K_LED, K_NULL = 255,
+	K_DEL, K_LED, K_NULL = 255,
 };
 
 constexpr uint8_t keybCurrent[7][5] PROGMEM = {
@@ -197,25 +198,30 @@ public:
 #if BYTE_ORDER == LITTLE_ENDIAN
 		return p_[0] + (p_[1] << 8) + (p_[2] << 16);
 #else
-		return (p_[0]<<24) + (p_[1] << 16) + (p_[2] << 8);
+		return (p_[0] << 24) + (p_[1] << 16) + (p_[2] << 8);
 #endif
 	}
 };
 
-enum { 
-	EXT_Z80 = str_ext("z80").toUint32(), 
+enum {
+	EXT_Z80 = str_ext("z80").toUint32(),
 	EXT_SCR = str_ext("scr").toUint32(),
 	EXT_CFG = str_ext("cfg").toUint32(),
 };
 
+constexpr size_t MEMORY_SIZE = 0xC000;
+uint8_t* memory; //49152 bytes
+
 class Z48_ESPBoy : protected zymosis::Z80CallBacks
 {
 protected:
-	Z48_ESPBoy() { reset(); }
-
-	__inline void reset()
+	Z48_ESPBoy()
 	{
-		memset(memory, 0, sizeof(memory));
+	}
+
+	ZYMOSIS_INLINE void reset()
+	{
+		memset(memory, 0, MEMORY_SIZE);
 		memset(line_change, 0xff, sizeof(line_change));
 
 		key_matriz.reset();
@@ -224,7 +230,7 @@ protected:
 		port_1f = 0;
 	}
 
-	__inline void memWriteFn(uint16_t addr, uint8_t value, zymosis::Z80MemIOType mio)
+	ZYMOSIS_INLINE void memWriteFn(uint16_t addr, uint8_t value, zymosis::Z80MemIOType mio)
 	{
 		uint16_t line;
 
@@ -251,7 +257,7 @@ protected:
 		}
 	}
 
-	__inline uint8_t memReadFn(uint16_t addr, zymosis::Z80MemIOType mio)
+	ZYMOSIS_INLINE uint8_t memReadFn(uint16_t addr, zymosis::Z80MemIOType mio)
 	{
 		if (addr < 0x4000)
 		{
@@ -263,7 +269,7 @@ protected:
 		}
 	}
 
-	__inline uint8_t portInFn(uint16_t port, zymosis::Z80PIOType pio)
+	ZYMOSIS_INLINE uint8_t portInFn(uint16_t port, zymosis::Z80PIOType pio)
 	{
 		uint8_t val;
 		uint16_t off;
@@ -297,7 +303,7 @@ protected:
 		return val;
 	}
 
-	__inline void portOutFn(uint16_t port, uint8_t value, zymosis::Z80PIOType pio)
+	ZYMOSIS_INLINE void portOutFn(uint16_t port, uint8_t value, zymosis::Z80PIOType pio)
 	{
 		if (!(port & 0x01))
 		{
@@ -307,7 +313,7 @@ protected:
 		}
 	}
 public:
-	__inline void emulateFrame()
+	ZYMOSIS_INLINE void emulateFrame()
 	{
 		uint_fast32_t n, ticks, sacc, sout;
 
@@ -344,7 +350,7 @@ public:
 		}
 	}
 
-	__inline void renderFrame()
+	ZYMOSIS_INLINE void renderFrame()
 	{
 		uint16_t ch, ln, px, row, aptr, optr, attr, pptr1, pptr2, bright;
 		uint_fast16_t ink, pap;
@@ -411,21 +417,21 @@ public:
 				line1 = memory[pptr1++];
 				line2 = memory[pptr2++];
 				px = 4;
-				while(px--)
+				while (px--)
 				{
-					switch( (line1 >> 6) | ((line2 & 0xC0) >> 4) )
+					switch ((line1 >> 6) | ((line2 & 0xC0) >> 4))
 					{
-						case 0x00: col = pap * 4; break;
-						case 0x01:
-						case 0x02:
-						case 0x04:
-						case 0x08: col = ink + pap * 3; break;
-						case 0x07:
-						case 0x0B:
-						case 0x0D:
-						case 0x0E: col = ink * 3 + pap; break;
-						case 0x0F: col = ink * 4; break;
-						default: col = ink * 2 + pap * 2; 
+					case 0x00: col = pap * 4; break;
+					case 0x01:
+					case 0x02:
+					case 0x04:
+					case 0x08: col = ink + pap * 3; break;
+					case 0x07:
+					case 0x0B:
+					case 0x0D:
+					case 0x0E: col = ink * 3 + pap; break;
+					case 0x0F: col = ink * 4; break;
+					default: col = ink * 2 + pap * 2;
 					}
 
 					line_buffer[optr++] = col;
@@ -718,7 +724,7 @@ void printFast(int x, int y, char* str, int16_t color)
 	{
 		drawCharFast(x, y, c, color, 0);
 		x += 6;
-	} 
+	}
 }
 
 void printFast_P(int x, int y, PGM_P str, int16_t color)
@@ -774,7 +780,7 @@ bool espboy_logo_effect(int out)
 
 #define CONTROL_TYPES   5
 
- const char layout_name[] PROGMEM = "KEMP\0QAOP\0ZXse\0SINC\0CURS\0";
+const char layout_name[] PROGMEM = "KEMP\0QAOP\0ZXse\0SINC\0CURS\0";
 
 constexpr int8_t layout_scheme[] PROGMEM = {
   -1, 0, 0, 0, 0, 0, 0, 0,
@@ -846,7 +852,7 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 	{
 		if (change)
 		{
-			printFast_P(100, 4, &layout_name[control_type*5], TFT_WHITE);
+			printFast_P(100, 4, &layout_name[control_type * 5], TFT_WHITE);
 
 			pos = file_cursor - FILE_HEIGHT / 2;
 
@@ -1002,67 +1008,67 @@ void ICACHE_RAM_ATTR sound_ISR()
 
 
 
-void setup() {
-	//Serial.begin(115200);
-	//Serial.println(ESP.getFreeHeap());
+void zx_setup() {
 
-	WiFi.mode(WIFI_OFF); //disable wifi to save some battery power
-	Wire.setClock(1000000); //I2C to 1mHz
+		WiFi.mode(WIFI_OFF); //disable wifi to save some battery power
+		Wire.setClock(1000000); //I2C to 1mHz
 
-	//DAC init, LCD backlit off
-	dac.begin(MCP4725address);
-	delay(100);
-	dac.setVoltage(0, false);
-	delay(100);
+		//DAC init, LCD backlit off
+		dac.begin(MCP4725address);
+		delay(100);
+		dac.setVoltage(0, false);
+		delay(100);
 
-	//mcp23017 and buttons init, should preceed the TFT init
-	mcp.begin(MCP23017address);
-	delay(100);
+		//mcp23017 and buttons init, should preceed the TFT init
+		mcp.begin(MCP23017address);
+		delay(100);
 
-	for (int i = 0; i < 8; ++i)
-	{
-		mcp.pinMode(i, INPUT);
-		mcp.pullUp(i, HIGH);
-	}
-
-	pad_state = 0;
-	pad_state_prev = 0;
-	pad_state_t = 0;
-
-	//TFT init
-
-	mcp.pinMode(csTFTMCP23017pin, OUTPUT);
-	mcp.digitalWrite(csTFTMCP23017pin, LOW);
-
-	tft.begin();
-	tft.setRotation(0);
-	tft.fillScreen(TFT_BLACK);
-
-	dac.setVoltage(4095, true);
-
-	//keybModule init
-	Wire.begin();
-	Wire.beginTransmission(0x27); //check for MCP23017Keyboard at address 0x27
-	if (!Wire.endTransmission()) {
-		keybModuleExist = 1;
-		mcpKeyboard.begin(7);
-		for (uint8_t i = 0; i < 7; i++) {
-			mcpKeyboard.pinMode(i, OUTPUT);
-			mcpKeyboard.digitalWrite(i, HIGH);
+		for (int i = 0; i < 8; ++i)
+		{
+			mcp.pinMode(i, INPUT);
+			mcp.pullUp(i, HIGH);
 		}
-		for (uint8_t i = 0; i < 5; i++) {
-			mcpKeyboard.pinMode(i + 8, INPUT);
-			mcpKeyboard.pullUp(i + 8, HIGH);
+
+		pad_state = 0;
+		pad_state_prev = 0;
+		pad_state_t = 0;
+
+		//TFT init
+
+		mcp.pinMode(csTFTMCP23017pin, OUTPUT);
+		mcp.digitalWrite(csTFTMCP23017pin, LOW);
+
+		tft.begin();
+		tft.setRotation(0);
+		tft.fillScreen(TFT_BLACK);
+
+		dac.setVoltage(4095, true);
+
+		//keybModule init
+		Wire.begin();
+		Wire.beginTransmission(0x27); //check for MCP23017Keyboard at address 0x27
+		if (!Wire.endTransmission()) {
+			keybModuleExist = 1;
+			mcpKeyboard.begin(7);
+			for (uint8_t i = 0; i < 7; i++) {
+				mcpKeyboard.pinMode(i, OUTPUT);
+				mcpKeyboard.digitalWrite(i, HIGH);
+			}
+			for (uint8_t i = 0; i < 5; i++) {
+				mcpKeyboard.pinMode(i + 8, INPUT);
+				mcpKeyboard.pullUp(i + 8, HIGH);
+			}
+			mcpKeyboard.pinMode(7, OUTPUT);
+			mcpKeyboard.digitalWrite(7, HIGH); //backlit on
 		}
-		mcpKeyboard.pinMode(7, OUTPUT);
-		mcpKeyboard.digitalWrite(7, HIGH); //backlit on
-	}
-	else keybModuleExist = 0;
+		else keybModuleExist = 0;
 
-	//filesystem init
-	SPIFFS.begin();
+		//cpu = new zymosis::Z80Cpu<Z48_ESPBoy>;
+		memory = (uint8_t*)malloc(MEMORY_SIZE);
 
-	//Serial.println(ESP.getFreeHeap());
+		//filesystem init
+		SPIFFS.begin();
+
 }
 
 void sound_init(void)
@@ -1094,7 +1100,7 @@ void change_ext(char* fname, const uint32_t ext)
 		if (!*fname) break;
 		if (*fname++ == '.')
 		{
-			fname[0] = (uint8_t)(ext & 0xFF); 
+			fname[0] = (uint8_t)(ext & 0xFF);
 			fname[1] = (uint8_t)((ext >> 8) & 0xFF);
 			fname[2] = (uint8_t)((ext >> 16) & 0xFF);
 			break;
@@ -1103,7 +1109,7 @@ void change_ext(char* fname, const uint32_t ext)
 }
 
 
-uint8_t code2layout[] PROGMEM = 
+uint8_t code2layout[] PROGMEM =
 {
 	K_SS,		//35
 	K_ENTER,	//36
@@ -1127,7 +1133,7 @@ uint8_t zx_layout_code(uint8_t c)
 	if (c >= 'a' && c <= 'z') c -= 32;
 	if (c > 34 && c < 96)
 	{
-		return pgm_read_byte(&code2layout[c-35]);
+		return pgm_read_byte(&code2layout[c - 35]);
 	}
 	return 0;
 }
@@ -1225,120 +1231,119 @@ void keybOnscreen() {
 	memset(line_change, 0xff, sizeof(line_change));
 }
 
-uint32_t avgt = 0;
 
-void loop()
+void zx_loop()
 {
-	uint32_t t_prev, t_new;
-	uint8_t frames;
+		uint32_t t_prev, t_new;
+		uint8_t frames;
+		uint32_t avgt = 0;
 
-	file_cursor = 0;
+		file_cursor = 0;
 
-	control_type = CONTROL_PAD_KEYBOARD;
-	control_pad_l = K_Z;
-	control_pad_r = K_X;
-	control_pad_u = K_Q;
-	control_pad_d = K_A;
-	control_pad_act = K_SPACE;
-	control_pad_esc = K_ENTER;
-	control_pad_lft = K_NULL;
-	control_pad_rgt = K_NULL;
+		control_type = CONTROL_PAD_KEYBOARD;
+		control_pad_l = K_Z;
+		control_pad_r = K_X;
+		control_pad_u = K_Q;
+		control_pad_d = K_A;
+		control_pad_act = K_SPACE;
+		control_pad_esc = K_ENTER;
+		control_pad_lft = K_NULL;
+		control_pad_rgt = K_NULL;
 
-	if (espboy_logo_effect(0))
-	{
-		wait_any_key(1000);
-		espboy_logo_effect(1);
-	}
-
-	file_browser("/", F("Load .Z80:"), filename, sizeof(filename));
-
-	cpu.Z80_Reset();
-
-	if (*filename) // filename is not ""
-	{
-		change_ext(filename, EXT_CFG);
-		zx_load_layout(filename);
-
-		change_ext(filename, EXT_SCR);
-		if (cpu.load_scr(filename))
+		if (espboy_logo_effect(0))
 		{
-			cpu.renderFrame();
-			wait_any_key(3 * 1000);
+			wait_any_key(1000);
+			espboy_logo_effect(1);
 		}
 
-		change_ext(filename, EXT_Z80);
+		file_browser("/", F("Load .Z80:"), filename, sizeof(filename));
+
 		cpu.Z80_Reset();
-		cpu.load_z80(filename);
-	}
 
-	SPIFFS.end();
-
-	memset(line_change, 0xff, sizeof(line_change));
-	sound_init();
-
-	//main loop
-
-	t_prev = micros();
-
-	while (1)
-	{
-		key_matriz.reset();
-		check_key();
-
-		//check onscreen keyboard
-		if ((pad_state & PAD_LFT) && (pad_state & PAD_RGT)) keybOnscreen();
-
-		//check keyboard module
-		if (keybModuleExist) keybModule();
-
-		switch (control_type)
+		if (*filename) // filename is not ""
 		{
-		case CONTROL_PAD_KEYBOARD:
-			key_matriz.set(control_pad_l, pad_state & PAD_LEFT);
-			key_matriz.set(control_pad_r, pad_state & PAD_RIGHT);
-			key_matriz.set(control_pad_u, pad_state & PAD_UP);
-			key_matriz.set(control_pad_d, pad_state & PAD_DOWN);
-			key_matriz.set(control_pad_act, pad_state & PAD_ACT);
-			key_matriz.set(control_pad_esc, pad_state & PAD_ESC);
-			key_matriz.set(control_pad_lft, pad_state & PAD_LFT);
-			key_matriz.set(control_pad_rgt, pad_state & PAD_RGT);
-			break;
+			change_ext(filename, EXT_CFG);
+			zx_load_layout(filename);
 
-		case CONTROL_PAD_KEMPSTON:
-			port_1f = 0;
-			if (pad_state & PAD_LEFT) port_1f |= 0x02;
-			if (pad_state & PAD_RIGHT) port_1f |= 0x01;
-			if (pad_state & PAD_UP) port_1f |= 0x08;
-			if (pad_state & PAD_DOWN) port_1f |= 0x04;
-			if (pad_state & PAD_ACT) port_1f |= 0x10;
-			key_matriz.set(K_SPACE, pad_state & PAD_ESC);
-			key_matriz.set(K_0, pad_state & PAD_LFT);
-			key_matriz.set(K_1, pad_state & PAD_RGT);
-			break;
+			change_ext(filename, EXT_SCR);
+			if (cpu.load_scr(filename))
+			{
+				cpu.renderFrame();
+				wait_any_key(3 * 1000);
+			}
+
+			change_ext(filename, EXT_Z80);
+			cpu.Z80_Reset();
+			cpu.load_z80(filename);
 		}
 
-		t_new = micros();
-		frames = ((t_new - t_prev) / (1000000 / ZX_FRAME_RATE));
-		if (frames < 1) frames = 1;
-		t_prev = t_new;
+		SPIFFS.end();
 
-		if (frames > MAX_FRAMESKIP) frames = MAX_FRAMESKIP;
+		memset(line_change, 0xff, sizeof(line_change));
+		sound_init();
 
-		while (frames--) cpu.emulateFrame();
+		//main loop
 
-		uint32_t tp = t_prev; // micros();
+		t_prev = micros();
+		while (1)
+		{
+			key_matriz.reset();
+			check_key();
 
-		cpu.renderFrame();
+			//check onscreen keyboard
+			if ((pad_state & PAD_LFT) && (pad_state & PAD_RGT)) keybOnscreen();
 
-		uint32_t tt = micros() - tp;
-		uint32_t st = 1000000 / tt;
+			//check keyboard module
+			if (keybModuleExist) keybModule();
 
-		avgt = ((avgt * 19) + tt) / 20;
+			switch (control_type)
+			{
+			case CONTROL_PAD_KEYBOARD:
+				key_matriz.set(control_pad_l, pad_state & PAD_LEFT);
+				key_matriz.set(control_pad_r, pad_state & PAD_RIGHT);
+				key_matriz.set(control_pad_u, pad_state & PAD_UP);
+				key_matriz.set(control_pad_d, pad_state & PAD_DOWN);
+				key_matriz.set(control_pad_act, pad_state & PAD_ACT);
+				key_matriz.set(control_pad_esc, pad_state & PAD_ESC);
+				key_matriz.set(control_pad_lft, pad_state & PAD_LFT);
+				key_matriz.set(control_pad_rgt, pad_state & PAD_RGT);
+				break;
 
-		tft.fillRect(0, 0, 6 * 6, 20, TFT_BLACK);
-		tft.drawString(String(sound_wr_ptr), 0, 10);
-		tft.drawString(String(st), 0, 0);
+			case CONTROL_PAD_KEMPSTON:
+				port_1f = 0;
+				if (pad_state & PAD_LEFT) port_1f |= 0x02;
+				if (pad_state & PAD_RIGHT) port_1f |= 0x01;
+				if (pad_state & PAD_UP) port_1f |= 0x08;
+				if (pad_state & PAD_DOWN) port_1f |= 0x04;
+				if (pad_state & PAD_ACT) port_1f |= 0x10;
+				key_matriz.set(K_SPACE, pad_state & PAD_ESC);
+				key_matriz.set(K_0, pad_state & PAD_LFT);
+				key_matriz.set(K_1, pad_state & PAD_RGT);
+				break;
+			}
 
-		delay(0);
-	}
+			t_new = micros();
+			frames = ((t_new - t_prev) / (1000000 / ZX_FRAME_RATE));
+			if (frames < 1) frames = 1;
+			t_prev = t_new;
+
+			if (frames > MAX_FRAMESKIP) frames = MAX_FRAMESKIP;
+
+			while (frames--) cpu.emulateFrame();
+
+			uint32_t tp = t_prev; // micros();
+
+			cpu.renderFrame();
+
+			uint32_t tt = micros() - tp;
+			uint32_t st = 1000000 / tt;
+
+			avgt = ((avgt * 19) + tt) / 20;
+
+			tft.fillRect(0, 0, 6 * 4, 10, TFT_BLACK);
+			//tft.drawString(String(avgt), 0, 10);
+			tft.drawString(String(st), 0, 0);
+
+			delay(0);
+		}
 }
